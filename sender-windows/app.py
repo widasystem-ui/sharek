@@ -15,7 +15,7 @@ from ctypes import wintypes
 
 import sharek
 
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 HOTKEY_LABEL = "Ctrl+Alt+S"
 SCREEN_HOTKEY_LABEL = "Ctrl+Alt+D"
 INSTANCE_PORT = 47809  # localhost only: lets a second launch bring the first window back
@@ -112,10 +112,19 @@ class SharekApp:
                 kw.setdefault("mbps", 0)
             self.status.update(kw)
         self.sync_screen()
+        self.sync_tray()
         self.push()
 
+    def sync_tray(self) -> None:
+        if self.tray is not None:
+            try:
+                self.tray.visible = (not self.visible) or self.status["state"] == "streaming"
+            except Exception:
+                pass
+
     def sync_screen(self) -> None:
-        """While sharing: keep Sharek's own window off the TV, and switch the laptop screen off in "TV only" mode."""
+        """While sharing on both screens, keep Sharek's own window off the TV. In "TV only" mode the laptop
+        screen goes dark, so Sharek stays visible on the TV (that's the only screen you can see)."""
         threading.Thread(target=self._sync_screen, daemon=True).start()
 
     def _sync_screen(self) -> None:
@@ -123,7 +132,8 @@ class SharekApp:
         with self.screen_lock:
             streaming = self.status["state"] == "streaming"
             if self.own_hwnd:
-                ok = blackout.exclude_from_capture(self.own_hwnd, streaming)
+                hide_from_tv = streaming and self.settings.get("screen") != "tv_only"
+                ok = blackout.exclude_from_capture(self.own_hwnd, hide_from_tv)
                 if not ok:
                     sharek.log("could not hide Sharek's window from capture")
             want_off = streaming and self.settings.get("screen") == "tv_only" and self.blackout is not None
@@ -316,7 +326,10 @@ class SharekApp:
                 prev = None
                 continue
             if not st.running:
-                if not self.user_stopped:
+                if st.stopped_by_tv:
+                    self.set_status(state="idle")
+                    self.notify("انوقف العرض من التلفزيون")
+                elif not self.user_stopped:
                     msg = getattr(self, "last_engine_message", "") or "انقطع الاتصال بالتلفزيون"
                     self.set_status(state="error", message=msg)
                     if not self.visible:
@@ -334,8 +347,7 @@ class SharekApp:
     # ------------------------------------------------------------------ window / tray
     def show(self) -> None:
         self.visible = True
-        if self.tray is not None:
-            self.tray.visible = False
+        self.sync_tray()
         if self.window:
             try:
                 self.window.show()
@@ -346,8 +358,7 @@ class SharekApp:
 
     def hide(self) -> None:
         self.visible = False
-        if self.tray is not None:
-            self.tray.visible = True
+        self.sync_tray()
         if self.window:
             self.window.hide()
         if not self.told_about_tray:

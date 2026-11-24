@@ -44,6 +44,7 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener {
     @Volatile var isOnScreen = false
         private set
     private var streaming = false
+    private var lastBack = 0L
     private var videoW = 1920
     private var videoH = 1080
 
@@ -90,6 +91,17 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener {
         if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
             if (approvalScreen != null) { answer(REJECT); return true }
             if (permissionScreen != null) { later(); return true }
+            if (streaming) {
+                // Back twice ends sharing; once just explains how.
+                val now = System.currentTimeMillis()
+                if (now - lastBack < 3000) {
+                    Hub.closeSession()
+                } else {
+                    android.widget.Toast.makeText(this, "اضغط رجوع مرة ثانية لإيقاف العرض", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                lastBack = now
+                return true
+            }
         }
         return super.dispatchKeyEvent(event)
     }

@@ -11,6 +11,7 @@ package com.sharek.tv
  *   sender -> TV: "SHRK" + version(u8)
  *   sender -> TV: first packet must be T_HELLO with JSON {"name": "...", "id": "..."}
  *   TV -> sender: one byte, [APPROVED] or [REJECTED] (after the person answers on the TV)
+ *   TV -> sender: later, [STOP] when the person ends sharing with the remote
  *   sender -> TV: packets type(u8) + length(u32) + payload
  */
 object Protocol {
@@ -28,6 +29,7 @@ object Protocol {
 
     const val APPROVED = 1
     const val REJECTED = 0
+    const val STOP = 2
 
     const val APPROVAL_TIMEOUT_MS = 60_000L
     const val MAX_PACKET = 16 * 1024 * 1024

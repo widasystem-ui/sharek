@@ -34,7 +34,7 @@ object Hub : SessionListener {
         prefs().edit().putStringSet("trusted", set).apply()
     }
 
-    fun closeSession() { server?.closeCurrent() }
+    fun closeSession() { server?.stopCurrent() }
 
     /** Makes sure MainActivity is on screen, launching it if needed. */
     private fun ensureActivity(): MainActivity? {

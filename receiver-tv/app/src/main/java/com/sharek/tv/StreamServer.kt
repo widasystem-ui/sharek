@@ -52,6 +52,9 @@ class StreamServer(private val listener: SessionListener) : Thread("sharek-serve
 
     fun closeCurrent() { current?.close() }
 
+    /** Ends the current stream because the person asked to, telling the sender first. */
+    fun stopCurrent() { current?.stopByTv() }
+
     private fun activate(s: Session) {
         val old = synchronized(lock) { val o = current; current = s; o }
         if (old != null && old !== s) old.close()
@@ -61,8 +64,20 @@ class StreamServer(private val listener: SessionListener) : Thread("sharek-serve
         private var video: VideoDecoder? = null
         private var audio: AudioPlayer? = null
 
+        @Volatile private var stopReason: String? = null
+
         fun close() {
             try { sock.close() } catch (_: Exception) {}
+        }
+
+        fun stopByTv() {
+            stopReason = "تم إيقاف العرض"
+            Thread {
+                try { sock.getOutputStream().apply { write(Protocol.STOP); flush() } } catch (_: Exception) {}
+                // Let the sender read STOP and hang up itself, so it shows "stopped" instead of "connection lost".
+                join(1500)
+                close()
+            }.start()
         }
 
         override fun run() {
@@ -137,6 +152,7 @@ class StreamServer(private val listener: SessionListener) : Thread("sharek-serve
                 }
             } catch (e: Exception) {
                 Log.i(TAG, "session ended: ${e.message}")
+                stopReason?.let { reason = it }
             } finally {
                 video?.release()
                 audio?.release()

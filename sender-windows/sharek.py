@@ -25,6 +25,7 @@ import time
 DISCOVERY_PORT = 47800
 STREAM_PORT = 47801
 PROTO_VERSION = 2
+TV_STOP = b"\x02"  # TV -> sender: the person stopped sharing with the remote
 APPROVAL_TIMEOUT = 65  # seconds the TV gives the person to answer (+ margin)
 T_PING, T_VIDEO, T_AUDIO, T_CONFIG, T_BYE, T_HELLO = 0, 1, 2, 3, 4, 5
 
@@ -291,6 +292,7 @@ class Streamer:
         self.error: str | None = None
         self.restore_mute: bool | None = None
         self.cancelled = False
+        self.stopped_by_tv = False
         self.encoder = ""
         self.on_phase = on_phase or (lambda phase: None)
 
@@ -340,7 +342,7 @@ class Streamer:
             raise RuntimeError(f"ما قدرنا نلتقط الشاشة: {e}")
         self.encoder, self.pix, self.enc_opts = enc, pix, enc_opts
         self.running = True
-        for target in (self._video_loop, self._send_loop):
+        for target in (self._video_loop, self._send_loop, self._listen_loop):
             t = threading.Thread(target=target, daemon=True)
             t.start()
             self.threads.append(t)
@@ -491,6 +493,25 @@ class Streamer:
             if self.running:
                 self.error = str(e)
                 self.stop(f"خطأ في ضغط الفيديو: {e}")
+
+    def _listen_loop(self) -> None:
+        """Messages from the TV after approval: a stop request, or the connection closing."""
+        while self.running:
+            try:
+                b = self.sock.recv(1)
+            except socket.timeout:
+                continue
+            except OSError:
+                b = b""
+            if not self.running:
+                return
+            if b == TV_STOP:
+                self.stopped_by_tv = True
+                self.stop("انوقف العرض من التلفزيون")
+                return
+            if not b:
+                self.stop("انقطع الاتصال بالتلفزيون")
+                return
 
     def _audio_loop(self) -> None:
         try:
