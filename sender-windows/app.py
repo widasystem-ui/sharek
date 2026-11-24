@@ -123,10 +123,9 @@ class SharekApp:
         with self.screen_lock:
             streaming = self.status["state"] == "streaming"
             if self.own_hwnd:
-                try:
-                    blackout.exclude_from_capture(self.own_hwnd, streaming)
-                except Exception:
-                    pass
+                ok = blackout.exclude_from_capture(self.own_hwnd, streaming)
+                if not ok:
+                    sharek.log("could not hide Sharek's window from capture")
             want_off = streaming and self.settings.get("screen") == "tv_only" and self.blackout is not None
             if want_off and not self.screen_dimmed:
                 level = blackout.get_brightness()
@@ -415,10 +414,8 @@ class SharekApp:
             sharek.log("blackout ready:", bool(self.blackout.hwnd), "supported:", self.blackout.supported)
         except Exception as e:
             sharek.log("blackout unavailable:", e)
-        try:
-            self.own_hwnd = int(self.window.native.Handle.ToInt64())
-        except Exception:
-            self.own_hwnd = 0
+        self.own_hwnd = find_own_window()
+        sharek.log("own window:", hex(self.own_hwnd))
         for target in (self._ticker, self._auto_search_loop):
             threading.Thread(target=target, daemon=True).start()
         threading.Thread(target=hotkey_loop, args=(self,), daemon=True).start()
@@ -480,6 +477,32 @@ def tray_image(size: int = 64):
         cx, cy = s * 0.5, s * 0.56
         d.arc([cx - r, cy - r, cx + r, cy + r], 225, 315, fill=ink, width=w)
     return img.resize((size, size), Image.LANCZOS)
+
+
+def find_own_window() -> int:
+    """Handle of Sharek's main window (found by process id, so no cross-thread WinForms access)."""
+    user32 = ctypes.windll.user32
+    pid = os.getpid()
+    found: list[int] = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid:
+            cls = ctypes.create_unicode_buffer(128)
+            user32.GetClassNameW(hwnd, cls, 128)
+            if cls.value.startswith("WindowsForms"):
+                found.append(hwnd)
+        return True
+
+    for _ in range(30):  # the window may still be appearing
+        found.clear()
+        user32.EnumWindows(each, 0)
+        if found:
+            return int(found[0])
+        time.sleep(0.2)
+    return 0
 
 
 def hotkey_loop(app: SharekApp) -> None:
