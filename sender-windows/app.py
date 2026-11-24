@@ -15,12 +15,13 @@ from ctypes import wintypes
 
 import sharek
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 HOTKEY_LABEL = "Ctrl+Alt+S"
+SCREEN_HOTKEY_LABEL = "Ctrl+Alt+D"
 INSTANCE_PORT = 47809  # localhost only: lets a second launch bring the first window back
 
 DEFAULTS = {"res": "1080p", "fps": 60, "quality": "high", "audio_mode": "tv", "fill": True,
-            "last_tv": "", "manual_ip": ""}
+            "last_tv": "", "manual_ip": "", "screen": "mirror"}
 QUALITY_MBPS = {"medium": 6, "high": 12, "max": 20}
 RES_LINES = {"720p": 720, "1080p": 1080, "native": 0}
 
@@ -44,6 +45,8 @@ class SharekApp:
         self.settings = sharek.load_settings()
         self._migrate()
         self.lock = threading.RLock()
+        if "brightness_restore" in self.settings:  # last run ended while the screen was off
+            threading.Thread(target=self._restore_brightness, daemon=True).start()
         self.tvs: list[dict] = []
         self.searching = False
         self.status = {"state": "idle", "message": "", "tv_name": "", "fps": 0, "mbps": 0, "encoder": ""}
@@ -54,6 +57,10 @@ class SharekApp:
         self.visible = True
         self.told_about_tray = False
         self.quitting = False
+        self.blackout = None
+        self.own_hwnd = 0
+        self.screen_lock = threading.Lock()
+        self.screen_dimmed = False
 
     def _migrate(self) -> None:
         s = self.settings
@@ -65,14 +72,18 @@ class SharekApp:
             s["res"] = "1080p"
         if s["quality"] not in QUALITY_MBPS:
             s["quality"] = "high"
+        if s["screen"] not in ("mirror", "tv_only"):
+            s["screen"] = "mirror"
         sharek.save_settings(s)
 
     # ------------------------------------------------------------------ state → UI
     def state(self) -> dict:
-        keys = ("res", "fps", "quality", "audio_mode", "fill", "last_tv", "manual_ip")
+        keys = ("res", "fps", "quality", "audio_mode", "fill", "last_tv", "manual_ip", "screen")
         return {
             "version": APP_VERSION,
             "hotkey": HOTKEY_LABEL,
+            "screen_hotkey": SCREEN_HOTKEY_LABEL,
+            "tv_only_supported": bool(self.blackout and self.blackout.supported),
             "device_name": sharek.device_name(),
             "searching": self.searching,
             "tvs": self.tvs,
@@ -100,7 +111,47 @@ class SharekApp:
                 kw.setdefault("fps", 0)
                 kw.setdefault("mbps", 0)
             self.status.update(kw)
+        self.sync_screen()
         self.push()
+
+    def sync_screen(self) -> None:
+        """While sharing: keep Sharek's own window off the TV, and switch the laptop screen off in "TV only" mode."""
+        threading.Thread(target=self._sync_screen, daemon=True).start()
+
+    def _sync_screen(self) -> None:
+        import blackout
+        with self.screen_lock:
+            streaming = self.status["state"] == "streaming"
+            if self.own_hwnd:
+                try:
+                    blackout.exclude_from_capture(self.own_hwnd, streaming)
+                except Exception:
+                    pass
+            want_off = streaming and self.settings.get("screen") == "tv_only" and self.blackout is not None
+            if want_off and not self.screen_dimmed:
+                level = blackout.get_brightness()
+                if level is not None:
+                    # Saved on disk first, so a crash can't leave the laptop dark.
+                    self.settings["brightness_restore"] = level
+                    sharek.save_settings(self.settings)
+                    blackout.set_brightness(0)
+                self.blackout.show()
+                self.screen_dimmed = True
+            elif not want_off and self.screen_dimmed:
+                if self.blackout:
+                    self.blackout.hide()
+                self._restore_brightness()
+                self.screen_dimmed = False
+
+    def _restore_brightness(self) -> None:
+        level = self.settings.pop("brightness_restore", None)
+        if level is not None:
+            try:
+                import blackout
+                blackout.set_brightness(level)
+            except Exception:
+                pass
+            sharek.save_settings(self.settings)
 
     def tray_title(self) -> str:
         s = self.status["state"]
@@ -235,16 +286,32 @@ class SharekApp:
             return
         elif key == "audio_mode" and value not in ("tv", "laptop", "both"):
             return
+        elif key == "screen" and value not in ("mirror", "tv_only"):
+            return
         self.settings[key] = value
         sharek.save_settings(self.settings)
         if key == "audio_mode" and self.streamer and self.streamer.running:
             threading.Thread(target=self.streamer.set_audio_mode, args=(value,), daemon=True).start()
+        if key == "screen":
+            self.sync_screen()
         self.push()
+
+    def toggle_screen(self) -> None:
+        """Ctrl+Alt+D: switch between showing on both screens and TV only."""
+        self.set_setting("screen", "mirror" if self.settings.get("screen") == "tv_only" else "tv_only")
 
     def _ticker(self) -> None:
         prev = None
+        awake = False
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x1, 0x2
         while not self.quitting:
             time.sleep(1)
+            # Windows turning the display off by itself would stop screen capture, so keep it awake while sharing.
+            want_awake = self.status["state"] == "streaming"
+            if want_awake != awake:
+                flags = ES_CONTINUOUS | (ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED if want_awake else 0)
+                ctypes.windll.kernel32.SetThreadExecutionState(flags)
+                awake = want_awake
             st = self.streamer
             if self.status["state"] != "streaming" or not st:
                 prev = None
@@ -268,6 +335,8 @@ class SharekApp:
     # ------------------------------------------------------------------ window / tray
     def show(self) -> None:
         self.visible = True
+        if self.tray is not None:
+            self.tray.visible = False
         if self.window:
             try:
                 self.window.show()
@@ -278,6 +347,8 @@ class SharekApp:
 
     def hide(self) -> None:
         self.visible = False
+        if self.tray is not None:
+            self.tray.visible = True
         if self.window:
             self.window.hide()
         if not self.told_about_tray:
@@ -285,8 +356,11 @@ class SharekApp:
             self.notify(f"شارك شغال جنب الساعة. اضغط {HOTKEY_LABEL} للمشاركة.")
 
     def minimize(self) -> None:
-        if self.window:
-            self.window.minimize()
+        # Minimising tucks Sharek beside the clock instead of leaving it on the taskbar.
+        self.hide()
+
+    def _on_minimized(self) -> None:
+        threading.Thread(target=self.hide, daemon=True).start()
 
     def notify(self, text: str) -> None:
         if self.tray is not None:
@@ -299,6 +373,10 @@ class SharekApp:
         self.quitting = True
         if self.streamer and self.streamer.running:
             self.streamer.stop()
+        if self.blackout:
+            self.blackout.hide()
+            self.blackout.close()
+        self._restore_brightness()
         if self.tray:
             try:
                 self.tray.stop()
@@ -328,9 +406,19 @@ class SharekApp:
             pystray.MenuItem("خروج", lambda: self.quit()),
         )
         self.tray = pystray.Icon("sharek", tray_image(), "شارك", menu)
-        self.tray.run_detached()
+        self.tray.run_detached(setup=lambda icon: None)  # hidden until the window is hidden
 
     def start_background(self) -> None:
+        try:
+            import blackout
+            self.blackout = blackout.Blackout()
+            sharek.log("blackout ready:", bool(self.blackout.hwnd), "supported:", self.blackout.supported)
+        except Exception as e:
+            sharek.log("blackout unavailable:", e)
+        try:
+            self.own_hwnd = int(self.window.native.Handle.ToInt64())
+        except Exception:
+            self.own_hwnd = 0
         for target in (self._ticker, self._auto_search_loop):
             threading.Thread(target=target, daemon=True).start()
         threading.Thread(target=hotkey_loop, args=(self,), daemon=True).start()
@@ -397,13 +485,14 @@ def tray_image(size: int = 64):
 def hotkey_loop(app: SharekApp) -> None:
     user32 = ctypes.windll.user32
     MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, WM_HOTKEY = 0x1, 0x2, 0x4000, 0x0312
-    if not user32.RegisterHotKey(None, 1, MOD_ALT | MOD_CONTROL | MOD_NOREPEAT, ord("S")):
-        sharek.log("hotkey Ctrl+Alt+S is taken by another program")
-        return
+    actions = {1: (ord("S"), app.toggle), 2: (ord("D"), app.toggle_screen)}
+    for hid, (vk, _) in actions.items():
+        if not user32.RegisterHotKey(None, hid, MOD_ALT | MOD_CONTROL | MOD_NOREPEAT, vk):
+            sharek.log(f"hotkey Ctrl+Alt+{chr(vk)} is taken by another program")
     msg = wintypes.MSG()
     while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-        if msg.message == WM_HOTKEY:
-            threading.Thread(target=app.toggle, daemon=True).start()
+        if msg.message == WM_HOTKEY and msg.wParam in actions:
+            threading.Thread(target=actions[msg.wParam][1], daemon=True).start()
 
 
 def single_instance(app_ref: list) -> bool:
@@ -468,10 +557,12 @@ def main() -> None:
     )
     app.window = window
     window.events.closing += app._on_closing
+    window.events.minimized += app._on_minimized
     webview.start(app.start_background, private_mode=True)
     app.quitting = True
     if app.streamer and app.streamer.running:
         app.streamer.stop()
+    app._restore_brightness()
 
 
 if __name__ == "__main__":

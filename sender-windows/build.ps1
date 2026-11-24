@@ -11,7 +11,7 @@ python -m PyInstaller --noconfirm --clean --windowed --name Sharek --icon "$here
     --workpath $work --specpath $work --distpath "$root\dist" "$here\app.py"
 
 New-Item -ItemType Directory -Force "$root\release" | Out-Null
-$zip = "$root\release\Sharek-Windows-v$Version.zip"
+$zip = "$root\release\Sharek-Windows.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path "$root\dist\Sharek" -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Built $zip"

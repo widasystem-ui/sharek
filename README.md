@@ -10,8 +10,8 @@
 
 | الجهاز | الملف |
 |---|---|
-| الكمبيوتر (ويندوز 10/11) | `Sharek-Windows-v1.0.zip`: فكّه وشغّل `Sharek.exe` |
-| التلفزيون (Android TV / Google TV) | `Sharek-TV-v1.0.apk` |
+| الكمبيوتر (ويندوز 10/11) | `Sharek-Windows.zip`: فكّه وشغّل `Sharek.exe` |
+| التلفزيون (Android TV / Google TV) | `Sharek-TV.apk` |
 
 > ويندوز بيطلع تحذير SmartScreen لأن البرنامج بدون توقيع رقمي. اضغط **مزيد من المعلومات** وبعدها **تشغيل على أي حال**.
 
@@ -19,9 +19,10 @@
 
 - ٦٠ إطار بالثانية، والضغط يتم على كرت الشاشة (Intel QSV / NVIDIA NVENC / AMD AMF).
 - تختار من وين يطلع الصوت: التلفزيون، أو الكمبيوتر، أو الاثنين، وتقدر تغيّره وأنت تعرض.
+- وضع **التلفزيون فقط**: شاشة الكمبيوتر تنطفي والعرض يكمل على التلفزيون، وترجع الشاشة لما يوقف العرض (<kbd>Ctrl+Alt+D</kbd>).
 - التلفزيون يعرض **«طلب عرض من (اسم الجهاز)»**، وتختار: موافق، أو السماح دائماً، أو رفض.
 - تطبيق التلفزيون يفتح بنفسه أول ما يتصل فيه جهاز.
-- البرنامج يتصغّر جنب الساعة، والاختصار <kbd>Ctrl+Alt+S</kbd> يبدأ ويوقف المشاركة من أي مكان.
+- التصغير يودّي البرنامج جنب الساعة (مو التاسك بار)، والاختصار <kbd>Ctrl+Alt+S</kbd> يبدأ ويوقف المشاركة من أي مكان.
 - شكل الصورة: ملء الشاشة أو بحواف سوداء.
 
 ## تثبيت التطبيق على التلفزيون
@@ -29,7 +30,7 @@
 **الطريقة الأسهل (بدون كمبيوتر):**
 1. ثبّت تطبيق **Downloader** من متجر Google Play في التلفزيون.
 2. اكتب فيه هذا الرابط:
-   `https://github.com/widasystem-ui/sharek/releases/latest/download/Sharek-TV-v1.0.apk`
+   `https://github.com/widasystem-ui/sharek/releases/latest/download/Sharek-TV.apk`
 3. اسمح له بتثبيت التطبيقات لما يطلب، وثبّت شارك.
 
 **أو بفلاشة USB:** انسخ ملف الـ APK على فلاشة، وافتحه من مدير الملفات في التلفزيون.
@@ -55,14 +56,15 @@
 
 Mirror your Windows screen and sound to an Android TV / Google TV (tested on a Sony BRAVIA) over Wi-Fi. Free, no ads, no time limits.
 
-**Download** the Windows app (`Sharek-Windows-v1.0.zip`) and the TV app (`Sharek-TV-v1.0.apk`) from [Releases](../../releases/latest).
+**Download** the Windows app (`Sharek-Windows.zip`) and the TV app (`Sharek-TV.apk`) from [Releases](../../releases/latest).
 
 ### Features
 - 60 fps, hardware H.264 encoding (Intel QSV / NVIDIA NVENC / AMD AMF, with Media Foundation and x264 as fallbacks).
 - Choose where sound plays: TV, computer, or both (can be switched while sharing).
+- **TV only** mode: the laptop screen goes dark (backlight 0 + a cover window that capture skips) while the TV keeps showing the desktop; brightness comes back when sharing stops. <kbd>Ctrl+Alt+D</kbd> toggles it.
 - The TV asks before anyone can share: **Accept / Always allow / Reject**.
 - The TV app opens by itself when a device connects (it asks for the "display over other apps" permission on first run).
-- Tray icon and a global shortcut, <kbd>Ctrl+Alt+S</kbd>.
+- Minimises to the tray (not the taskbar); global shortcut <kbd>Ctrl+Alt+S</kbd>. Sharek's own window never shows on the TV.
 
 ### How it works
 | Step | Details |

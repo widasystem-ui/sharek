@@ -210,6 +210,9 @@
   .rows { padding: 2px 14px 12px; display: grid; gap: 10px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .row > span { color: var(--mist); font-size: 13px; white-space: nowrap; }
+  .app.no-tvonly .screenrow { display: none; }
+  .tvonly-note { margin: 10px 2px 0; font-size: 12px; color: var(--dim); text-align: center; }
+  .tvonly-note kbd { margin: 0 2px; }
 
   .seg { display: inline-flex; padding: 3px; border-radius: 11px; background: var(--raise); border: 1px solid var(--line); gap: 2px; }
   .seg button { border: 0; background: transparent; padding: 5px 11px; border-radius: 8px; font-size: 12.5px; color: var(--mist); white-space: nowrap; }
@@ -330,6 +333,8 @@
             <div class="seg" data-key="quality"><button data-v="medium">متوسطة</button><button data-v="high">عالية</button><button data-v="max">عالية جداً</button></div></div>
           <div class="row"><span>شكل الصورة</span>
             <div class="seg" data-key="fill" data-type="bool"><button data-v="true">ملء الشاشة</button><button data-v="false">بحواف</button></div></div>
+          <div class="row screenrow"><span>العرض على</span>
+            <div class="seg" data-key="screen" data-live="1"><button data-v="mirror">الكمبيوتر والتلفزيون</button><button data-v="tv_only">التلفزيون فقط</button></div></div>
           <div class="row"><span>الصوت يطلع من</span>
             <div class="seg" data-key="audio_mode" data-live="1"><button data-v="tv">التلفزيون</button><button data-v="laptop">الكمبيوتر</button><button data-v="both">الاثنين</button></div></div>
         </div>
@@ -347,9 +352,12 @@
         <div class="stat"><b id="sEnc">—</b><small>الضغط</small></div>
       </div>
       <div class="panel">
+        <div class="row screenrow"><span>العرض على</span>
+            <div class="seg" data-key="screen" data-live="1"><button data-v="mirror">الكمبيوتر والتلفزيون</button><button data-v="tv_only">التلفزيون فقط</button></div></div>
         <div class="row"><span>الصوت يطلع من</span>
           <div class="seg" data-key="audio_mode" data-live="1"><button data-v="tv">التلفزيون</button><button data-v="laptop">الكمبيوتر</button><button data-v="both">الاثنين</button></div></div>
       </div>
+      <p class="tvonly-note" id="tvOnlyNote">شاشة الكمبيوتر مطفية الحين والتلفزيون يعرض كل شي. <kbd id="screenKey">Ctrl+Alt+D</kbd> يرجّعها.</p>
     </div>
 
     <!-- rejected / error -->
@@ -435,6 +443,9 @@
     $("btnScan").classList.toggle("busy", !!st.searching);
     $("scanLabel").textContent = st.searching ? "يبحث…" : "بحث";
     $("hotkey").textContent = st.hotkey || "Ctrl+Alt+S";
+    $("screenKey").textContent = st.screen_hotkey || "Ctrl+Alt+D";
+    app.classList.toggle("no-tvonly", st.tv_only_supported === false);
+    $("tvOnlyNote").style.display = st.settings.screen === "tv_only" ? "block" : "none";
     $("heroName").textContent = selected ? tvName(selected) : (target() || "اختر تلفزيون");
     $("heroDevice").textContent = "«" + (st.device_name || "جهازك") + "»";
 
@@ -540,8 +551,9 @@
   function mockApi() {
     const tvs = [{ name: "تلفزيون الصالة", ip: "192.168.1.50" }, { name: "تلفزيون المجلس", ip: "192.168.1.51" }];
     const m = {
-      version: "1.0", hotkey: "Ctrl+Alt+S", device_name: "My-Laptop", searching: false, tvs: [],
-      settings: { res: "1080p", fps: 60, quality: "high", audio_mode: "tv", fill: true, last_tv: "192.168.1.50", manual_ip: "" },
+      version: "1.1", hotkey: "Ctrl+Alt+S", screen_hotkey: "Ctrl+Alt+D", tv_only_supported: true,
+      device_name: "My-Laptop", searching: false, tvs: [],
+      settings: { res: "1080p", fps: 60, quality: "high", audio_mode: "tv", fill: true, last_tv: "192.168.1.50", manual_ip: "", screen: "mirror" },
       status: { state: "idle", message: "", tv_name: "", fps: 0, mbps: 0, encoder: "" },
     };
     let timer = null;
