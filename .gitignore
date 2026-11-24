@@ -1,0 +1,15 @@
+# build output
+dist/
+release/
+receiver-tv/.gradle/
+receiver-tv/build/
+receiver-tv/app/build/
+receiver-tv/local.properties
+__pycache__/
+*.pyc
+# test leftovers
+out.h264
+out.pcm
+*.apk
+*.ico.bak
+receiver-tv/.kotlin/

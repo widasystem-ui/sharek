@@ -1,0 +1,6 @@
+numpy
+soundcard
+av
+pywebview
+pystray
+pillow
